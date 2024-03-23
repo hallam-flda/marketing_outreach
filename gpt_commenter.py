@@ -1,34 +1,100 @@
 
 from openai import OpenAI
 import os
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup
+import pandas as pd
+
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+driver = webdriver.Chrome(options=chrome_options)
+
+from bs4 import BeautifulSoup
+import requests
+
+df = pd.read_csv("test_output.csv")
+new_df = df.copy().dropna()
+
+new_df = new_df[(new_df["about"] != 'no link found') & (new_df["about"] != '')]
+print(new_df['about'][0:5])
+
+url_list = list(new_df["about"])
+
+print(url_list)
 
 
-sample_about = '''
-Gulf Coast Finance was established in 2016 by current CEO. Having worked in the finance industry in the UK and Dubai he had a desire to break out in order to offer simplicity, honesty, and integrity amongst the complexities of the rapid growth and expansion in the region. From its birth Gulf Coast Finance was designed to put the client at the center. It was to be the service of choice and grew from one good recommendation to the next. Personalization and transparency are at the heart of everything we do.
 
-Having established a loyal client base in the Middle East, Gulf Coast Finance recognized the needs of those clients were evolving and grew connections with established partners to build a base in Africa. Our second office lies in the hub of economic growth and development in Lagos to serve the needs of those wishing to finance on the continent. Following that we went back to our roots to put our firm footing in the bustling and new powerhouse of the UK, Manchester. Our office is in the center of the exciting expansion and vibrant rejuvenation of this iconic UK city. With these solid bases to service our diverse clientele we are in a unique and advantageous position to become the best in our field.
+def get_soup(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    return soup
 
-From humble beginnings of offering straightforward mortgage advice to now meeting the needs of a myriad of client needs including project finance, investment, UK visas, and international business solutions. Whether you need to finance in Africa, the Middle East, or the UK we have the network, the expertise, and the knowledge to find what works for you. We will guarantee that we will offer you our undivided attention and to ensure you get a professional service we offer you a dedicated consultant who will work your case from start to completion. We work closely with you, the lenders, developers, and legal teams to ensure trust and confidence in the process. We look forward to building our relationship with you
-'''
+def find_paragraphs_with_keyword(soup, keywords, limit=3):
+    paragraphs = soup.find_all('p')
+    matched_paragraphs = []
+    for paragraph in paragraphs:
+        if any(keyword.lower() in paragraph.text.lower() for keyword in keywords):
+            matched_paragraphs.append(paragraph.text)
+            if len(matched_paragraphs) == limit:  # Stop after finding 'limit' number of paragraphs
+                break
+    return ' '.join(matched_paragraphs) if matched_paragraphs else "Keyword not found in any <p> tag."
+
+# Example usage
+
+keywords = ["founded","since","family","experience","run","established","years"]
+about_texts = []
+
+for url in url_list:
+    soup = get_soup(url)
+    founded_text = find_paragraphs_with_keyword(soup, keywords, limit=5)
+    about_texts.append(founded_text)
+    print(f"for {url}: {founded_text}")
+
+
 
 CHAT_GPT_INSTRUCTION = '''
-You are a master content reviewer, your job is to write a compliment about the text you receive and return a one line comment followed by a question that elicits a response. 
-When referring to the company in the text you should refer to the business as 'you' and 'your' rather than a separate entity. Do not return a line break in any response.
-Try to not be too verbose, shorter comments are preferred
+compliment the business and make specific mention to some of the topics they mention in the text. 
+Use a casual tone, you are british so don't use american phrases or terminology. 
+If a place name is mentioned, say you visited a few years ago and loved the area, make specific reference to a venue or location in the place.
+ Keep your response to two sentences and ask a question that encourages a response. Do not use people's names in your response:
 '''
+
 
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 MODEL = "gpt-3.5-turbo"
-response = client.chat.completions.create(
-    model=MODEL,
-    messages=[
-        {"role": "system",
-         "content":  f"{CHAT_GPT_INSTRUCTION}"},
-        {"role": "user", "content": f"{sample_about}"}
-    ],
-    temperature=0,
-)
+response_data = []
 
-print(response.choices[0].message.content)
+for url in url_list:
+    soup = get_soup(url)
+    founded_text = find_paragraphs_with_keyword(soup, keywords, limit=5)
+    print(f"trying{url}")
+    if founded_text != "Keyword not found in any <p> tag.":
+        # Replace the next line with your actual API call
+        chatgpt_response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": CHAT_GPT_INSTRUCTION},
+                {"role": "user", "content": founded_text}
+            ],
+            temperature=1,
+        )
+        chatgpt_text = chatgpt_response.choices[0].message.content
+    else:
+        chatgpt_text = ''
 
+    print(chatgpt_text)
+
+    # Append a dictionary with the URL, the text found, and the ChatGPT text
+    response_data.append({
+        'url': url,
+        'founded_text': founded_text,
+        'chatgpt_text': chatgpt_text
+    })
+
+
+response_df = pd.DataFrame(response_data)
+response_df = response_df.rename(columns={'url': 'about'})
+merged_df = pd.merge(new_df, response_df, on='about', how='left')
+merged_df.to_csv("chatgpt4_test_2.csv")
