@@ -16,6 +16,7 @@ class URLStatusChecker:
         clean_url_list = []
         for url in self.dataframe[url_column_name]:
             url_clean = "http://"+url
+            print(f"{url_clean}")
             try:
                 response = requests.get(url = url_clean, headers=self.headers, timeout=10)
                 status_list.append("working" if response.ok else "broken website")
