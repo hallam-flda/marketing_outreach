@@ -63,7 +63,7 @@ If a place name is mentioned, say you visited a few years ago and loved the area
 
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-MODEL = "gpt-3.5-turbo"
+MODEL = "gpt-3.5-turbo-0125"
 response_data = []
 
 for url in url_list:
@@ -83,8 +83,6 @@ for url in url_list:
         chatgpt_text = chatgpt_response.choices[0].message.content
     else:
         chatgpt_text = ''
-
-    print(chatgpt_text)
 
     # Append a dictionary with the URL, the text found, and the ChatGPT text
     response_data.append({
