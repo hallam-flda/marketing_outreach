@@ -16,9 +16,12 @@ class WebScraper:
 
     def get_soup(self, url):
         print(f"{url} is the URL being tried for get_soup")
-        self.driver.get(url)
-        self.driver.implicitly_wait(4)  # Adjust time as needed
-        return BeautifulSoup(self.driver.page_source, 'html.parser')
+        try:
+            self.driver.get(url)
+            self.driver.implicitly_wait(4)  # Adjust time as needed
+            return BeautifulSoup(self.driver.page_source, 'html.parser')
+        except:
+            return "Unable to find an about page"
 
 
     def social_media_links(self, page_soup):
@@ -52,8 +55,10 @@ class WebScraper:
                     about_link = link['href']
                     # Check if the link is relative
                     if not about_link.startswith('http'):
-                        # Construct the full URL
-                        about_link = base_url + about_link
+                        if not about_link.startswith('/'):
+                            about_link = base_url + '/' + about_link
+                        else:# Construct the full URL
+                            about_link = base_url + about_link
                     return about_link
             except:
                 continue
@@ -66,10 +71,15 @@ class WebScraper:
         keyword = "calculator"
         try:
             web_element = page_soup.find(name="a", href=lambda href: href and f"{keyword}" in href)
-            web_element_link = web_element['href']
+            if web_element and web_element['href']:
+                web_element_link = web_element['href']
+                # Check if the link is relative
+                if not web_element.startswith('http'):
+                    # Construct the full URL
+                    web_element_link = base_url + web_element_link
+                return web_element_link
         except:
-            web_element_link = "no link found"
-        return web_element_link
+            return "no link found"
 
     def insight_page(self, page_soup, base_url):
         # Separate the keywords related to "team" and others for prioritization
@@ -77,7 +87,13 @@ class WebScraper:
         for keyword in keywords:
             try:
                 web_element = page_soup.find(name="a", href=lambda href: href and f"{keyword}" in href)
-                return web_element['href']
+                if web_element and web_element['href']:
+                    web_element_link = web_element['href']
+                    # Check if the link is relative
+                    if not web_element.startswith('http'):
+                        # Construct the full URL
+                        web_element_link = base_url + web_element_link
+                    return web_element_link
             except:
                 continue
         return "no link found"
@@ -86,16 +102,29 @@ class WebScraper:
         entries = []
         for url in self.cleaned_df['url_clean']:
             print(f"trying URL: {url}")
-            page_soup = self.get_soup(url=url)
-            socials = self.social_media_links(page_soup=page_soup)
-            abouts = self.about_us_page(page_soup=page_soup, base_url=url)
-            calc = self.calculator_page(page_soup=page_soup, base_url=url)
-            insight = self.insight_page(page_soup=page_soup, base_url=url)
-            socials["about"] = abouts
-            socials["calculator"] = calc
-            socials["insight"] = insight
-            socials["url_clean"] = url
-            entries.append(socials)
+            try:
+                page_soup = self.get_soup(url=url)
+                socials = self.social_media_links(page_soup=page_soup)
+                abouts = self.about_us_page(page_soup=page_soup, base_url=url)
+                calc = self.calculator_page(page_soup=page_soup, base_url=url)
+                insight = self.insight_page(page_soup=page_soup, base_url=url)
+                socials["about"] = abouts
+                socials["calculator"] = calc
+                socials["insight"] = insight
+                socials["url_clean"] = url
+                entries.append(socials)
+            except:
+                new_dict = {
+                    "facebook": None,
+                    "instagram": None,
+                    "twitter":None,
+                    "about": "go crazy write whatever you want",
+                    "calculator": None,
+                    "insight": None,
+                    "url_clean": url
+                }
+                entries.append(new_dict)
+
         return pd.DataFrame(entries)
 
 
